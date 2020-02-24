@@ -158,7 +158,7 @@ c:\Program Files\CloudbaseSolutions\Cloudbase-Init
 
 ### References
 
-[1] CAPI QuickStart: https://cluster-api.sigs.k8s.io/user/quick-start.html
-[2] Kubeadm & Windows work thanks to @benmoss : https://github.com/benmoss/kubeadm-windows
-[3] Cloudbase-Init: https://cloudbase.it/cloudbase-init/
-[4] Cloudbase-Init docs: https://cloudbase-init.readthedocs.io/en/latest/
+- [1] CAPI QuickStart: https://cluster-api.sigs.k8s.io/user/quick-start.html
+- [2] Kubeadm & Windows work thanks to @benmoss : https://github.com/benmoss/kubeadm-windows
+- [3] Cloudbase-Init: https://cloudbase.it/cloudbase-init/
+- [4] Cloudbase-Init docs: https://cloudbase-init.readthedocs.io/en/latest/
