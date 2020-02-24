@@ -79,7 +79,7 @@ SSH_PUB_KEY_FILE="/path/to/rsa/public/key"
 # Export ssh key file
 export SSH_PUBLIC_KEY=$(cat "${SSH_PUB_KEY_FILE}" | base64 | tr -d '\r\n')
 
-export AZURE_LOCATION="westeurope2"
+export AZURE_LOCATION="westeurope"
 
 cat controlplane.yaml | envsubst | kubectl create -f -
 
