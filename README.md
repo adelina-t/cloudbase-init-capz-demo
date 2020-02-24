@@ -56,9 +56,9 @@ curl -L https://github.com/kubernetes-sigs/cluster-api-provider-azure/releases/d
 Once all the CAPI components have deployed, we can start creating our cluster. This example cluster will contain
 two machines, one linux machine for the controlplane and one Windows Node.
 
-1. Deploy controlplane
+1. Deploy cluster 
 
-Use [this]() demo cluster spec and customize it according to your needs.
+Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/cluster.yaml) demo cluster spec and customize it according to your needs.
 By default, CAPZ will create a vnet for the cluster with CIDR 10.0.0.0/8 .
 
 ```
@@ -67,7 +67,7 @@ kubectl create -f cluster.yaml
 
 2. Deploy controlplane machine
 
-Use [this]() demo spec for the controlplane. Customize it according to your needs.
+Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/controlplane.yaml) demo spec for the controlplane. Customize it according to your needs.
 
 ```
 export AZURE_SUBSCRIPTION_ID_B64="$(echo -n "$AZURE_SUBSCRIPTION_ID" | base64 | tr -d '\n')"
@@ -102,7 +102,7 @@ kubectl --namespace=default get secret/capi-quickstart-kubeconfig -o json \
 
 3. Deploy Flannel CNI
 
-Use [this]() addons spec for the flannel CNI deployment.
+Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/addons.yaml) addons spec for the flannel CNI deployment.
 Pay close attention to the CIDR for the flannel network and change it to correspond to the pod CIDR you selected in the cluster spec.
 
 ```
@@ -123,7 +123,7 @@ run it in `preKubeadmCommands` section of the KubeadmConfig spec for the node.
 
 - Create MachineDeployment for Windows Node.
 
-Use [this]() MachineDeployment spec for the Windows Node.
+Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/machinesdeployment.yaml) MachineDeployment spec for the Windows Node.
 
 Be careful to change the image reference in the AzureMachineTemplate to point to your image that you just created.
 
