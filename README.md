@@ -11,6 +11,12 @@ author: @adelina-t ( Adelina Tuvenie - Cloudbase Solutions )
 - [kind](https://github.com/kubernetes-sigs/kind) for setting up management cluster
 - envsubst
 
+### Prepare management cluster
+
+```
+kind cluster create --name capz-demo
+```
+
 ### Installation
 
 ### Install CAPI, Bootstrap provider & infra provider components
