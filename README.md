@@ -1,4 +1,4 @@
-### Bootstrapping Windows Nodes with CAPI provider Azure  and Cloudbase Init
+### Bootstrapping Windows Nodes with CAPI provider Azure  and Cloudbase-Init
 
 Guide on how to use CAPZ ( Cluster API provider Azure ) with Cloudbase-Init in
 order to bootstrap K8s Windows Nodes.
