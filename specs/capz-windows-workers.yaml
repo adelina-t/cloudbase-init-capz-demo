@@ -1,0 +1,90 @@
+---
+apiVersion: cluster.x-k8s.io/v1alpha3
+kind: MachineDeployment
+metadata:
+  name: capi-win
+  namespace: default
+spec:
+  clusterName: capz-demo
+  replicas: 2
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      version: $KUBERNETES_VERSION
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+          kind: KubeadmConfigTemplate
+          name: capi-win
+      clusterName: capz-demo
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+        kind: AzureMachineTemplate
+        name: capi-win
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+kind: AzureMachineTemplate
+metadata:
+  name: capi-win
+  namespace: default
+spec:
+  template:
+    spec:
+      location: westeurope
+      osDisk:
+        diskSizeGB: 80
+        managedDisk:
+          storageAccountType: Premium_LRS
+        osType: Windows
+      sshPublicKey: $AZURE_SSH_PUBLIC_KEY_B64
+      vmSize: Standard_D2s_v3
+      image:
+        sharedGallery:
+          subscriptionID: $AZURE_SUBSCRIPTION_ID
+          resourceGroup: $WINDOWS_WORKER_IMAGE_RG
+          gallery: $WINDOWS_WORKER_IMAGE_GALLERY
+          name: $WINDOWS_WORKER_IMAGE_DEFINITION
+          version: $WINDOWS_WORKER_IMAGE_VERSION
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+kind: KubeadmConfigTemplate
+metadata:
+  name: capi-win
+  namespace: default
+spec:
+  template:
+    spec:
+      files:
+      - content: |
+          {
+            "cloud": "AzurePublicCloud",
+            "tenantId": "$AZURE_TENANT_ID",
+            "subscriptionId": "$AZURE_SUBSCRIPTION_ID",
+            "aadClientId": "$AZURE_CLIENT_ID",
+            "aadClientSecret": "$AZURE_CLIENT_SECRET",
+            "resourceGroup": "capz-demo",
+            "securityGroupName": "capz-demo-node-nsg",
+            "location": "westeurope",
+            "vmType": "standard",
+            "vnetName": "capz-demo-vnet",
+            "vnetResourceGroup": "capz-demo",
+            "subnetName": "capz-demo-node-subnet",
+            "routeTableName": "capz-demo-node-routetable",
+            "loadBalancerSku": "standard",
+            "maximumLoadBalancerRuleCount": 250,
+            "useManagedIdentityExtension": false,
+            "useInstanceMetadata": true
+          }
+        owner: root:root
+        path: /etc/kubernetes/azure.json
+        permissions: "0644"
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            cloud-config: /etc/kubernetes/azure.json
+            cloud-provider: azure
+          name: '{{ v1.local_hostname }}'
+      preKubeadmCommands:
+      - curl.exe -Lo /tmp/kubeadm-bootstrap.ps1 https://raw.githubusercontent.com/ionutbalutoiu/cloudbase-init-capz-demo/update-guide/scripts/kubeadm-bootstrap.ps1
+      - powershell -C "/tmp/kubeadm-bootstrap.ps1"

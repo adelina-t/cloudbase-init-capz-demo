@@ -1,164 +1,195 @@
-### Bootstrapping Windows Nodes with CAPI provider Azure  and Cloudbase-Init
+# Kubernetes Windows Nodes with CAPI provider Azure and Cloudbase-Init
 
-Guide on how to use CAPZ ( Cluster API provider Azure ) with Cloudbase-Init in
-order to bootstrap K8s Windows Nodes.
+Guide on how to use CAPZ (Cluster API provider Azure) with Cloudbase-Init in order to bootstrap K8s Windows nodes.
 
-author: @adelina-t ( Adelina Tuvenie - Cloudbase Solutions )
+Authors:
+* @adelina-t (Adelina Tuvenie - Cloudbase Solutions)
+* @ionutbalutoiu (Ionut Balutoiu - Cloudbase Solutions)
 
-### Requirements
+## Requirements
 
-- Windows Azure image containing latest [Cloudbase-Init](https://cloudbase.it/cloudbase-init/)
-- [kind](https://github.com/kubernetes-sigs/kind) for setting up management cluster
-- envsubst
+* Windows Azure image containing latest [Cloudbase-Init](https://cloudbase.it/cloudbase-init/) already published to an Azure shared gallery. Guide on how to prepare the image is available [here](https://github.com/ionutbalutoiu/k8s-e2e-runner/tree/capz_flannel/image-builder/azure-cbsl-init).
+* `kind` tool, used to deploy the management cluster. It can be installed via:
+    ```
+    sudo curl -Lo /usr/local/bin/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-linux-amd64
+    sudo chmod +x /usr/local/bin/kind
+    ```
+* `clusterctl` tool, used to add the cluster-api components with CAPZ infrastructure plugin. It can be installed via:
+    ```
+    sudo curl -Lo /usr/local/bin/clusterctl https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.8/clusterctl-linux-amd64
+    sudo chmod +x /usr/local/bin/clusterctl
+    ```
+* `envsubst` tool installed.
 
-### Prepare management cluster
+## Deployment Steps
 
-```
-kind cluster create --name capz-demo
-```
+1. Deploy the management cluster via `kind`:
+    ```
+    kind create cluster --name capz-demo
+    ```
 
-### Installation
+2. Set the proper environment variables used by the Azure provider with their base64 encoded values:
+    ```
+    export AZURE_TENANT_ID=<TENANT_ID>
+    export AZURE_CLIENT_ID=<CLIENT_ID>
+    export AZURE_CLIENT_SECRET=<CLIENT_SECRET>
+    export AZURE_SUBSCRIPTION_ID=<SUBSCRIPTION_ID>
 
-### Install CAPI, Bootstrap provider & infra provider components
+    export AZURE_SUBSCRIPTION_ID_B64="$(echo -n "$AZURE_SUBSCRIPTION_ID" | base64 | tr -d '\n')"
+    export AZURE_TENANT_ID_B64="$(echo -n "$AZURE_TENANT_ID" | base64 | tr -d '\n')"
+    export AZURE_CLIENT_ID_B64="$(echo -n "$AZURE_CLIENT_ID" | base64 | tr -d '\n')"
+    export AZURE_CLIENT_SECRET_B64="$(echo -n "$AZURE_CLIENT_SECRET" | base64 | tr -d '\n')"
+    ```
 
-1. CAPI components
+3. Install the cluster api components with the Azure provider patched to work with Cloudbase-init Windows nodes, and wait for all the components to be ready
+    ```
+    clusterctl init --infrastructure azure:v0.4.6 --config specs/capz-config.yaml
+    kubectl wait --for=condition=Available deployments --all --all-namespaces
+    ```
 
-```
-kubectl create -f https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.2.9/cluster-api-components.yaml
-```
+    NOTE: [This](https://github.com/ionutbalutoiu/cluster-api-provider-azure/commit/9c8daedac75959b141fec7ea909c2c1fd0bd484b) is the patch to enable Cloudbase-init Windows nodes based on CAPZ `v0.4.6`.
 
-2. Kubeadm bootstrap provider 
+4. Set the required environment variables to deploy the new K8s cluster via CAPZ:
+    ```
+    export KUBERNETES_VERSION=v1.18.8
+    export AZURE_SSH_PUBLIC_KEY="$(cat $HOME/.ssh/id_rsa.pub)"
+    export AZURE_SSH_PUBLIC_KEY_B64="$(echo $AZURE_SSH_PUBLIC_KEY | base64 | tr -d '\n')"
 
-```
-kubectl create -f https://github.com/kubernetes-sigs/cluster-api-bootstrap-provider-kubeadm/releases/download/v0.1.5/bootstrap-components.yaml
-```
+    export WINDOWS_WORKER_IMAGE_RG="adtv-capz-win"
+    export WINDOWS_WORKER_IMAGE_GALLERY="capz_gallery"
+    export WINDOWS_WORKER_IMAGE_DEFINITION="ws-ltsc2019-docker-cbsl-init"
+    export WINDOWS_WORKER_IMAGE_VERSION="1.0.0"
+    ```
 
-3. Install CAPZ  infrastructure provider
+5. Deploy the new CAPZ cluster:
+    ```
+    cat specs/capz-cluster.yaml | envsubst | kubectl apply -f -
+    cat specs/capz-control-plane.yaml | envsubst | kubectl apply -f -
+    cat specs/capz-windows-workers.yaml | envsubst | kubectl apply -f -
+    ```
 
-```
-# Create the base64 encoded credentials
-export AZURE_SUBSCRIPTION_ID_B64="$(echo -n "$AZURE_SUBSCRIPTION_ID" | base64 | tr -d '\n')"
-export AZURE_TENANT_ID_B64="$(echo -n "$AZURE_TENANT_ID" | base64 | tr -d '\n')"
-export AZURE_CLIENT_ID_B64="$(echo -n "$AZURE_CLIENT_ID" | base64 | tr -d '\n')"
-export AZURE_CLIENT_SECRET_B64="$(echo -n "$AZURE_CLIENT_SECRET" | base64 | tr -d '\n')"
+6. Wait until the new cluster is provisioned. You can use `kubectl get cluster` and `kubectl get machine` to see the status of the new k8s deployement. When it's ready, it should report the cluster `Provisioned`, and the machines `Running`:
+    ```
+    $ kubectl get cluster
+    NAME        PHASE
+    capz-demo   Provisioned
 
-```
+    $ kubectl get machine -o=custom-columns=NAME:.metadata.name,PHASE:.status.phase
+    NAME                            PHASE
+    capi-win-695c4d6cf6-gmvc5       Running
+    capi-win-695c4d6cf6-mw5nf       Running
+    capz-demo-control-plane-ptd6w   Running
+    ```
 
-We will need to replace the CAPZ manager image in the deployment with a custom one built from this branch: https://github.com/adelina-t/cluster-api-provider-azure/tree/windows-vms
-because the current CAPZ does not support Windows VMs at the moment.
+7. When the cluster is succesfully deployed, fetch the kubeconfig, and use it for the next commands:
+    ```
+    kubectl get secret capz-demo-kubeconfig -o json | \
+        jq -r .data.value | \
+        base64 --decode > /tmp/capz-demo.kubeconfig
 
-```
-curl -L https://github.com/kubernetes-sigs/cluster-api-provider-azure/releases/download/v0.3.0/infrastructure-components.yaml | sed "s/us.gcr.io\/k8s-artifacts-prod\/cluster-api-azure\/cluster-api-azure-controller:v0.3.0/atuvenie\/capz-windows-amd64:0.1/g" | envsubst | kubectl create -f -
-```
+    export KUBECONFIG=/tmp/capz-demo.kubeconfig
+    ```
 
-### Deploy K8s Cluster
+8. At this moment, if we run `kubectl get pods -n kube-system`, we may notice that there isn't any CNI setup:
+    ```
+    NAME                                                    READY   STATUS    RESTARTS   AGE
+    coredns-66bff467f8-29mxb                                0/1     Pending   0          2m7s
+    coredns-66bff467f8-kgn8q                                0/1     Pending   0          2m7s
+    etcd-capz-demo-control-plane-zkw8z                      1/1     Running   0          2m26s
+    kube-apiserver-capz-demo-control-plane-zkw8z            1/1     Running   0          2m26s
+    kube-controller-manager-capz-demo-control-plane-zkw8z   1/1     Running   0          2m26s
+    kube-proxy-j6rpg                                        1/1     Running   0          2m7s
+    kube-scheduler-capz-demo-control-plane-zkw8z            1/1     Running   0          2m26s
+    ```
 
-Once all the CAPI components have deployed, we can start creating our cluster. This example cluster will contain
-two machines, one linux machine for the controlplane and one Windows Node.
+9. Deploy the kube-flannel CNI on Linux:
+    ```
+    kubectl apply -f specs/kube-flannel.yaml
+    ```
 
-1. Deploy cluster 
+    After a bit, if we list the pods from `kube-system`, we shall see the kube-flannel pods `Running`, and the CNI setup:
+    ```
+    NAME                                                    READY   STATUS    RESTARTS   AGE
+    coredns-66bff467f8-29mxb                                1/1     Running   0          10m
+    coredns-66bff467f8-kgn8q                                1/1     Running   0          10m
+    etcd-capz-demo-control-plane-zkw8z                      1/1     Running   0          10m
+    kube-apiserver-capz-demo-control-plane-zkw8z            1/1     Running   0          10m
+    kube-controller-manager-capz-demo-control-plane-zkw8z   1/1     Running   0          10m
+    kube-flannel-ds-amd64-5888g                             1/1     Running   0          84s
+    kube-proxy-j6rpg                                        1/1     Running   0          10m
+    kube-scheduler-capz-demo-control-plane-zkw8z            1/1     Running   0          10m
+    ```
 
-Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/cluster.yaml) demo cluster spec and customize it according to your needs.
-By default, CAPZ will create a vnet for the cluster with CIDR 10.0.0.0/8 .
+10. Add `kube-flannel` and `kube-proxy` on the Windows worker nodes, and wait for all the pods to be ready:
+    ```
+    kubectl apply -f specs/kube-flannel-windows.yaml
+    kubectl apply -f specs/kube-proxy-windows.yaml
+    kubectl wait --for=condition=Ready --timeout 30m pods --all --all-namespaces
+    ```
 
-```
-kubectl create -f cluster.yaml
-```
+11. Deploy a simple K8s deployment with a PowerShell-based webserver. It will configure a [Kubernetes deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) with a replica of 2, and a cluster IP on top of those:
+    ```
+    kubectl apply -f specs/win-webserver.yaml
+    ```
 
-2. Deploy controlplane machine
+12. Wait until the pods are running and the cluster IP is ready:
+    ```
+    $ kubectl get pods -o wide
+    NAME                             READY   STATUS    RESTARTS   AGE   IP           NODE             NOMINATED NODE   READINESS GATES
+    win-webserver-79bdf78b75-2dhfs   1/1     Running   0          16s   10.244.1.4   capi-win-fvjx9   <none>           <none>
+    win-webserver-79bdf78b75-bgwqf   1/1     Running   0          16s   10.244.2.4   capi-win-dgpnq   <none>           <none>
 
-Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/controlplane.yaml) demo spec for the controlplane. Customize it according to your needs.
+    $ kubectl get svc
+    NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+    win-webserver   ClusterIP   10.109.162.22   <none>        80/TCP    4m14s
+    ```
 
-```
-export AZURE_SUBSCRIPTION_ID_B64="$(echo -n "$AZURE_SUBSCRIPTION_ID" | base64 | tr -d '\n')"
-export AZURE_TENANT_ID_B64="$(echo -n "$AZURE_TENANT_ID" | base64 | tr -d '\n')"
-export AZURE_CLIENT_ID_B64="$(echo -n "$AZURE_CLIENT_ID" | base64 | tr -d '\n')"
-export AZURE_CLIENT_SECRET_B64="$(echo -n "$AZURE_CLIENT_SECRET" | base64 | tr -d '\n')"
+13. SSH into the master node:
+    ```
+    MASTER_PUBLIC_ADDRESS=$(kubectl --kubeconfig $HOME/.kube/config get cluster -o=custom-columns=ADDRESS:.spec.controlPlaneEndpoint.host --no-headers)
 
-SSH_PUB_KEY_FILE="/path/to/rsa/public/key"
-# Export ssh key file
-export SSH_PUBLIC_KEY=$(cat "${SSH_PUB_KEY_FILE}" | base64 | tr -d '\r\n')
+    ssh capi@$MASTER_PUBLIC_ADDRESS
+    ```
 
-export AZURE_LOCATION="westeurope"
+14. Try to ping the pods cluster addresses, and curl the webserver cluster IP:
+    ```
+    $ ping 10.244.1.4
+    PING 10.244.1.4 (10.244.1.4) 56(84) bytes of data.
+    64 bytes from 10.244.1.4: icmp_seq=1 ttl=127 time=2.39 ms
+    64 bytes from 10.244.1.4: icmp_seq=2 ttl=127 time=2.08 ms
+    ...
 
-cat controlplane.yaml | envsubst | kubectl create -f -
+    $ ping 10.244.2.4
+    PING 10.244.2.4 (10.244.2.4) 56(84) bytes of data.
+    64 bytes from 10.244.2.4: icmp_seq=1 ttl=127 time=2.40 ms
+    64 bytes from 10.244.2.4: icmp_seq=2 ttl=127 time=1.91 ms
+    ...
 
-```
+    $ curl 10.109.162.22
+    <html><body><H1>Windows Container Web Server</H1><p>IP 10.244.1.4 callerCount 1 </body></html>
 
-Verify that the control plane machine deployed correctly
+    $ curl 10.109.162.22
+    <html><body><H1>Windows Container Web Server</H1><p>IP 10.244.2.4 callerCount 1 </body></html>
+    ```
 
-```
-kubectl get machines --selector cluster.x-k8s.io/control-plane
-```
- 
-If all went well, you can retrieve the kubeconfig for the deployed cluster:
+    If everything deployed succesfully, the above commands should work as illustrated, and this will confirm:
+    * Pod <-> Pod communication
+    * ClusterIP functionality
 
-```
-kubectl --namespace=default get secret/capi-quickstart-kubeconfig -o json \
-  | jq -r .data.value \
-  | base64 --decode \
-  > ./capi-quickstart.kubeconfig
-```
 
-3. Deploy Flannel CNI
-
-Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/addons.yaml) addons spec for the flannel CNI deployment.
-Pay close attention to the CIDR for the flannel network and change it to correspond to the pod CIDR you selected in the cluster spec.
-
-```
-kubectl create -f addons.yaml
-```
-
-4. Deploy Windows Node.
-
-In order for Kubeadm join to work with Windows without requiring additional wrapper scripts, we will need to have kube-proxy and flannel running in
-a containr on the Windows Node. For this, we use [wins](https://github.com/rancher/wins) in order to be able to proxy commands from Windows Containers to
-the Windows Host. More detail about this are described [here](https://github.com/benmoss/kubeadm-windows).
-
-- Prepare Windows image.
-
-For the Windows node you need to prepare a Windows Server 1809 ( or later ) image that contains Cloudbase-Init. 
-The image must also contain kubelet, kubeadm & wins. Use [this](https://github.com/benmoss/kubeadm-windows/blob/master/windows-node.ps1) helper script when creating your image or 
-run it in `preKubeadmCommands` section of the KubeadmConfig spec for the node. 
-
-- Create MachineDeployment for Windows Node.
-
-Use [this](https://github.com/adelina-t/cloudbase-init-capz-demo/blob/master/specs/machinesdeployment.yaml) MachineDeployment spec for the Windows Node.
-
-Be careful to change the image reference in the AzureMachineTemplate to point to your image that you just created.
-
-```
-export AZURE_SUBSCRIPTION_ID_B64="$(echo -n "$AZURE_SUBSCRIPTION_ID" | base64 | tr -d '\n')"
-export AZURE_TENANT_ID_B64="$(echo -n "$AZURE_TENANT_ID" | base64 | tr -d '\n')"
-export AZURE_CLIENT_ID_B64="$(echo -n "$AZURE_CLIENT_ID" | base64 | tr -d '\n')"
-export AZURE_CLIENT_SECRET_B64="$(echo -n "$AZURE_CLIENT_SECRET" | base64 | tr -d '\n')"
-
-SSH_PUB_KEY_FILE="/path/to/rsa/public/key"
-# Export ssh key file
-export SSH_PUBLIC_KEY=$(cat "${SSH_PUB_KEY_FILE}" | base64 | tr -d '\r\n')
-
-export AZURE_LOCATION="westeurope2"
-
-cat machinedeployment.yaml | envsubst | kubectl create -f -
-
-```
-
-Note: The machine might take a while to deploy and for flannel to start as it needs to pull images for kube-proxy & flannel.
-
-#### A few words about the `preKubeadmCommands` in machinedeployment.yaml
-
-These are commands that are being run before calling `kubeadm join`. The take care of setting up the Docker nat network & External HNS network needed for flannel.
+## Troubleshooting
 
 ### Cloudbase-Init logs
 
-On the Windows Node, Cloudbase-Init logs can be found in:
+On the Windows Node, Cloudbase-Init logs can be found at:
 ```
-c:\Program Files\CloudbaseSolutions\Cloudbase-Init
+C:\Program Files\Cloudbase Solutions\Cloudbase-Init\Log
 ```
 
-### References
+## References
 
 - [1] CAPI QuickStart: https://cluster-api.sigs.k8s.io/user/quick-start.html
 - [2] Kubeadm & Windows work thanks to @benmoss : https://github.com/benmoss/kubeadm-windows
 - [3] Cloudbase-Init: https://cloudbase.it/cloudbase-init/
 - [4] Cloudbase-Init docs: https://cloudbase-init.readthedocs.io/en/latest/
+- [5] sig-windows-tools: https://github.com/kubernetes-sigs/sig-windows-tools/
