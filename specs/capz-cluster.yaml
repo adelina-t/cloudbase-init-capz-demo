@@ -1,0 +1,32 @@
+---
+apiVersion: cluster.x-k8s.io/v1alpha3
+kind: Cluster
+metadata:
+  name: capz-demo
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+      - 10.244.0.0/16
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1alpha3
+    kind: KubeadmControlPlane
+    name: capz-demo-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+    kind: AzureCluster
+    name: capz-demo
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
+kind: AzureCluster
+metadata:
+  name: capz-demo
+spec:
+  # Change this value to the region you want to deploy the cluster in.
+  location: westeurope
+  networkSpec:
+    vnet:
+      name: capz-demo-vnet
+  # Change this value to the resource group you want to deploy the cluster in.
+  resourceGroup: capz-demo
+  subscriptionID: $AZURE_SUBSCRIPTION_ID

@@ -1,0 +1,4 @@
+images:
+  infrastructure-azure:
+    repository: e2eteam
+    tag: v0.4.6-windows
