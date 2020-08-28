@@ -86,5 +86,5 @@ spec:
             cloud-provider: azure
           name: '{{ v1.local_hostname }}'
       preKubeadmCommands:
-      - curl.exe -Lo /tmp/kubeadm-bootstrap.ps1 https://raw.githubusercontent.com/ionutbalutoiu/cloudbase-init-capz-demo/update-guide/scripts/kubeadm-bootstrap.ps1
+      - curl.exe -Lo /tmp/kubeadm-bootstrap.ps1 https://raw.githubusercontent.com/adelina-t/cloudbase-init-capz-demo/master/scripts/kubeadm-bootstrap.ps1
       - powershell -C "/tmp/kubeadm-bootstrap.ps1"
