@@ -72,7 +72,7 @@ spec:
           cloud-provider: azure
         name: '{{ ds.meta_data["local_hostname"] }}'
     preKubeadmCommands:
-    - curl -Lo /tmp/kubeadm-bootstrap.sh https://raw.githubusercontent.com/ionutbalutoiu/cloudbase-init-capz-demo/update-guide/scripts/kubeadm-bootstrap.sh
+    - curl -Lo /tmp/kubeadm-bootstrap.sh https://raw.githubusercontent.com/adelina-t/cloudbase-init-capz-demo/master/scripts/kubeadm-bootstrap.sh
     - bash /tmp/kubeadm-bootstrap.sh
     useExperimentalRetryJoin: true
 ---
